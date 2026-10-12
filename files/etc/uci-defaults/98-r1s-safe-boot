@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# 对齐官方 GL-MT3000（512MB）启动策略：
+# - 开启 zram（官方同机型标配）
+# - 不预装 Docker；官方 MT3000 也无 Docker，故无需再禁用 dockerd
+# 易有云 / Samba / NFS / QuickStart 等与官方一样可正常自启。
+#
+
+if [ -x /etc/init.d/zram ]; then
+	uci -q set system.@system[0].zram_size_mb='128'
+	uci -q set system.@system[0].zram_comp_algo='lzo'
+	uci -q commit system
+	/etc/init.d/zram enable 2>/dev/null || true
+fi
+
+exit 0

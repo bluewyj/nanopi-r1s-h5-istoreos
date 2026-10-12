@@ -1,0 +1,9 @@
+# 本地调试产物，不要提交
+*.log
+*.img
+*.img.gz
+*.buildinfo
+manifest*.txt
+_pkgcheck/
+openwrt/
+output/

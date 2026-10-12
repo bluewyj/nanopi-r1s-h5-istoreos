@@ -1,0 +1,32 @@
+#!/bin/sh
+#
+# 首次启动一次性初始化（uci-defaults 执行后会自动删除本文件）
+#
+
+uci -q set system.@system[0].hostname='NanoPi-R1S-H5'
+uci -q commit system
+
+# 本板用户指定；官方 MT3000 默认是 192.168.100.1
+uci -q set network.lan.ipaddr='192.168.5.1'
+uci -q set network.lan.netmask='255.255.255.0'
+uci -q commit network
+
+uci -q set system.@system[0].zonename='Asia/Shanghai'
+uci -q set system.@system[0].timezone='CST-8'
+uci -q delete system.ntp.server
+uci -q add_list system.ntp.server='ntp.aliyun.com'
+uci -q add_list system.ntp.server='cn.pool.ntp.org'
+uci -q add_list system.ntp.server='time1.cloud.tencent.com'
+uci -q commit system
+
+cat > /etc/nanopi-build-info <<'EOF'
+Target : sunxi / cortexa53
+Device : FriendlyARM NanoPi R1S H5 (512MB RAM)
+Align  : official iStoreOS GL-MT3000 (512MB) package set
+WiFi   : not included
+LAN IP : 192.168.5.1
+Base   : iStoreOS 24.10 (bluewyj/istoreos)
+Flash  : *-squashfs-sdcard.img (decompress .gz first)
+EOF
+
+exit 0
