@@ -235,15 +235,15 @@ jobs:
           cp -v profiles.json config.buildinfo sha256sums version.buildinfo $GITHUB_WORKSPACE/output/ 2>/dev/null || true
           mv -f $GITHUB_WORKSPACE/output-config.seed $GITHUB_WORKSPACE/output/config.seed 2>/dev/null || true
           cp -v $GITHUB_WORKSPACE/openwrt/build.log $GITHUB_WORKSPACE/output/build.log 2>/dev/null || true
-          # 写一份刷机说明进产物
-          cat > $GITHUB_WORKSPACE/output/FLASH.txt <<'EOF'
-推荐首刷：*-squashfs-sdcard.img.gz
-1) 先解压得到 .img（不要直接刷 .gz）
-2) Rufus / balenaEtcher / dd 写入 TF（建议 Class10+）
-3) 5V/2A 供电，插入 BOOT 卡槽上电
-4) PWR 亮、STAT 闪烁 = 已启动
-5) 电脑网线接 LAN(eth1)，打开 http://192.168.5.1
-EOF
+          # 写一份刷机说明进产物（须保持 YAML | 块缩进，勿用顶格 heredoc）
+          {
+            echo '推荐首刷：*-squashfs-sdcard.img.gz'
+            echo '1) 先解压得到 .img（不要直接刷 .gz）'
+            echo '2) Rufus / balenaEtcher / dd 写入 TF（建议 Class10+）'
+            echo '3) 5V/2A 供电，插入 BOOT 卡槽上电'
+            echo '4) PWR 亮、STAT 闪烁 = 已启动'
+            echo '5) 电脑网线接 LAN(eth1)，打开 http://192.168.5.1'
+          } > "$GITHUB_WORKSPACE/output/FLASH.txt"
           {
             echo "ARTIFACT_NAME=iStoreOS-${REPO_BRANCH}-NanoPi-R1S-H5"
             echo "RELEASE_TAG=${REPO_BRANCH}-$(date +%Y%m%d)-${GITHUB_RUN_NUMBER}"
