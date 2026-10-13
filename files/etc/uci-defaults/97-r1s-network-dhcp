@@ -1,0 +1,100 @@
+#!/bin/sh
+#
+# R1S H5：强制板级网口 + 确保 LAN DHCPv4 可下发
+#
+# 用户反馈：问题不是管理地址，而是刷机插线后终端完全拿不到 DHCP。
+# pudie88 ImmortalWrt 同机可下发。本脚本在首启强制修正网口与 dhcp。
+#
+
+LOG=/etc/nanopi-net-boot.log
+{
+	date
+	echo "board=$(cat /tmp/sysinfo/board_name 2>/dev/null || echo unknown)"
+	ip -o link 2>/dev/null || true
+} >"$LOG" 2>&1
+
+LAN_PORT=eth1
+WAN_PORT=eth0
+if ! grep -q "$LAN_PORT" /proc/net/dev 2>/dev/null; then
+	if grep -q eth0 /proc/net/dev 2>/dev/null; then
+		echo "WARN: eth1 not in /proc/net/dev yet; keep roles, driver may load later" >>"$LOG"
+	fi
+fi
+
+# --- LAN / WAN 角色（与 sunxi 02_network: lan=eth1 wan=eth0 一致）---
+# 优先维护 br-lan（24.10 常见）；没有则直挂 eth1
+if uci -q get network.@device[0] >/dev/null 2>&1 || uci -q get network.br-lan >/dev/null 2>&1; then
+	# 查找名为 br-lan 的 device section
+	BR=
+	i=0
+	while uci -q get "network.@device[$i]" >/dev/null 2>&1; do
+		name=$(uci -q get "network.@device[$i].name")
+		if [ "$name" = "br-lan" ]; then
+			BR="network.@device[$i]"
+			break
+		fi
+		i=$((i + 1))
+	done
+	if [ -n "$BR" ]; then
+		uci -q delete "$BR.ports"
+		uci -q delete "$BR.ifname"
+		uci -q add_list "$BR.ports=$LAN_PORT"
+		uci -q set network.lan.device='br-lan'
+		echo "using existing br-lan -> $LAN_PORT" >>"$LOG"
+	else
+		uci -q set network.lan.device="$LAN_PORT"
+		echo "set lan.device=$LAN_PORT (no br-lan section)" >>"$LOG"
+	fi
+else
+	uci -q set network.lan.device="$LAN_PORT"
+fi
+
+uci -q set network.lan=interface
+uci -q set network.lan.proto='static'
+uci -q set network.lan.ipaddr='192.168.5.1'
+uci -q set network.lan.netmask='255.255.255.0'
+uci -q delete network.lan.ifname
+
+uci -q set network.wan=interface
+uci -q set network.wan.proto='dhcp'
+uci -q set network.wan.device="$WAN_PORT"
+uci -q delete network.wan.ifname
+
+# --- 强制 DHCPv4 服务（dnsmasq-full）---
+uci -q set dhcp.lan=dhcp
+uci -q set dhcp.lan.interface='lan'
+uci -q set dhcp.lan.start='100'
+uci -q set dhcp.lan.limit='150'
+uci -q set dhcp.lan.leasetime='12h'
+uci -q set dhcp.lan.dhcpv4='server'
+uci -q delete dhcp.lan.ignore
+uci -q delete dhcp.lan.dhcpv4
+uci -q set dhcp.lan.dhcpv4='server'
+
+uci -q commit network
+uci -q commit dhcp
+
+/etc/init.d/dnsmasq enable 2>/dev/null || true
+
+# 512MB：首启先保 DHCP，暂缓 NAS 类服务
+for s in linkease samba4 samba nfsd ksmdb; do
+	[ -x "/etc/init.d/$s" ] || continue
+	"/etc/init.d/$s" disable 2>/dev/null || true
+	"/etc/init.d/$s" stop 2>/dev/null || true
+	echo "disabled $s" >>"$LOG"
+done
+
+/etc/init.d/network restart 2>/dev/null || true
+sleep 2
+/etc/init.d/dnsmasq restart 2>/dev/null || true
+
+{
+	echo "--- after ---"
+	uci -q show network.lan
+	uci -q show network.wan
+	uci -q show dhcp.lan
+	ip -o link 2>/dev/null || true
+	pidof dnsmasq && echo "dnsmasq running" || echo "dnsmasq NOT running"
+} >>"$LOG" 2>&1
+
+exit 0

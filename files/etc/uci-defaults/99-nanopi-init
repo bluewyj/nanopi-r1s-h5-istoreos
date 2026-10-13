@@ -6,15 +6,11 @@
 uci -q set system.@system[0].hostname='NanoPi-R1S-H5'
 uci -q commit system
 
-# 本板用户指定。iStoreOS 出厂默认常为 192.168.100.1（不是 1.1）
-# 必须等 network.lan 段存在后再改，并强制 proto=static
-uci -q batch <<'EOF'
-set network.lan=interface
-set network.lan.proto='static'
-set network.lan.ipaddr='192.168.5.1'
-set network.lan.netmask='255.255.255.0'
-commit network
-EOF
+# IP 由 97-r1s-network-dhcp 统一强制；此处再写一遍作兜底
+uci -q set network.lan.proto='static'
+uci -q set network.lan.ipaddr='192.168.5.1'
+uci -q set network.lan.netmask='255.255.255.0'
+uci -q commit network
 
 uci -q set system.@system[0].zonename='Asia/Shanghai'
 uci -q set system.@system[0].timezone='CST-8'

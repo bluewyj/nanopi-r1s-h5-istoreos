@@ -1,9 +1,8 @@
 #!/bin/sh
 #
-# 对齐官方 GL-MT3000（512MB）启动策略：
-# - 开启 zram（官方同机型标配）
-# - 不预装 Docker；官方 MT3000 也无 Docker，故无需再禁用 dockerd
-# 易有云 / Samba / NFS / QuickStart 等与官方一样可正常自启。
+# 512MB 启动策略：
+# - 开启 zram
+# - 重型 NAS 服务由 97-r1s-network-dhcp 在首启禁用，避免拖死 dnsmasq 导致不下发 IP
 #
 
 if [ -x /etc/init.d/zram ]; then
