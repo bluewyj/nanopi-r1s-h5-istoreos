@@ -3,13 +3,21 @@
 #
 # 源码：https://github.com/bluewyj/istoreos  ·  分支 istoreos-24.10
 # 产物：istoreos-*-sunxi-cortexa53-friendlyarm_nanopi-r1s-h5-{ext4,squashfs}-sdcard.img.gz
-# 说明：软件集对齐官方 GL-MT3000（512MB）；不集成板载 WiFi / Docker
+# 规格：370MiB（默认）与 20GiB 根分区两版并行
 #
 name: Build iStoreOS (NanoPi R1S H5)
 
 on:
   workflow_dispatch:
     inputs:
+      variant:
+        description: '根分区规格'
+        type: choice
+        options:
+          - both
+          - 370m
+          - 20g
+        default: both
       ssh:
         description: '开启 SSH 调试会话 (true / false)'
         required: false
@@ -28,7 +36,6 @@ on:
 env:
   REPO_URL: https://github.com/bluewyj/istoreos
   REPO_BRANCH: istoreos-24.10
-  CONFIG_FILE: configs/nanopi-r1s-h5.config
   DIY_PART1: diy-part1.sh
   DIY_PART2: diy-part2.sh
   TZ: Asia/Shanghai
@@ -41,10 +48,35 @@ env:
   BUILD_LOG: '1'
 
 jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          V="${{ github.event.inputs.variant }}"
+          [ -z "$V" ] && V=both
+          case "$V" in
+            370m)
+              echo 'matrix={"include":[{"id":"370m","config":"configs/nanopi-r1s-h5.config","partsize":"370","label":"370MiB"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            20g)
+              echo 'matrix={"include":[{"id":"20g","config":"configs/nanopi-r1s-h5-20g.config","partsize":"20480","label":"20GiB"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo 'matrix={"include":[{"id":"370m","config":"configs/nanopi-r1s-h5.config","partsize":"370","label":"370MiB"},{"id":"20g","config":"configs/nanopi-r1s-h5-20g.config","partsize":"20480","label":"20GiB"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
   build:
+    needs: prepare
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     steps:
       - name: 检出本仓库
@@ -60,6 +92,13 @@ jobs:
           sudo rm -f /mnt/swapfile || true
           sudo apt-get clean
           echo "== 清理后 =="; df -h /
+
+      - name: 20g 额外清盘
+        if: matrix.id == '20g'
+        run: |
+          sudo docker system prune -af || true
+          sudo rm -rf /usr/local/share/powershell /usr/share/az_* /opt/microsoft || true
+          df -h /
 
       - name: 安装编译依赖
         run: |
@@ -101,8 +140,8 @@ jobs:
             openwrt/staging_dir/host
             openwrt/staging_dir/hostpkg
             openwrt/staging_dir/toolchain-*
-          # 用 run_number 区分写入，避免 key 已存在导致 save 失败；restore-keys 按前缀回落
-          key: tc-sunxi-a53-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-r${{ github.run_number }}
+          # 矩阵两路共用前缀回落；save 键带 variant 避免同 run 冲突
+          key: tc-sunxi-a53-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-${{ matrix.id }}-r${{ github.run_number }}
           restore-keys: |
             tc-sunxi-a53-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-
             tc-sunxi-a53-${{ env.REPO_BRANCH }}-
@@ -148,14 +187,18 @@ jobs:
 
       - name: 生成 .config 并校验
         working-directory: ./openwrt
+        env:
+          CONFIG_FILE: ${{ matrix.config }}
+          EXPECT_PARTSIZE: ${{ matrix.partsize }}
         run: |
           cat $GITHUB_WORKSPACE/$CONFIG_FILE >> .config
           make defconfig
-          echo "---------------- 关键配置校验 ----------------"
+          echo "---------------- 关键配置校验 (${{ matrix.id }} / ${{ matrix.label }}) ----------------"
           grep -E 'CONFIG_TARGET_sunxi_cortexa53_DEVICE_friendlyarm_nanopi-r1s-h5=y' .config || true
           grep -E 'CONFIG_PACKAGE_luci-app-(store|quickstart|linkease|ddnsto|diskman|samba4)=y' .config || true
           grep -E 'CONFIG_PACKAGE_zram-swap=y' .config || true
           grep -E 'CONFIG_PACKAGE_dockerd=y' .config || true
+          grep -E "CONFIG_TARGET_ROOTFS_PARTSIZE=${EXPECT_PARTSIZE}" .config || true
           # 硬性闸门：对齐官方 MT3000（512MB）核心包
           for k in \
             CONFIG_TARGET_sunxi_cortexa53_DEVICE_friendlyarm_nanopi-r1s-h5=y \
@@ -172,7 +215,7 @@ jobs:
             CONFIG_PACKAGE_blkid=y \
             CONFIG_PACKAGE_wget-ssl=y \
             CONFIG_PACKAGE_luci-ssl=y \
-            CONFIG_TARGET_ROOTFS_PARTSIZE=370
+            "CONFIG_TARGET_ROOTFS_PARTSIZE=${EXPECT_PARTSIZE}"
           do
             grep -q "$k" .config || { echo "::error::关键配置 $k 未生效，请检查 $CONFIG_FILE 与 feeds"; exit 1; }
           done
@@ -259,13 +302,13 @@ jobs:
             openwrt/staging_dir/host
             openwrt/staging_dir/hostpkg
             openwrt/staging_dir/toolchain-*
-          key: tc-sunxi-a53-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-r${{ github.run_number }}
+          key: tc-sunxi-a53-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-${{ matrix.id }}-r${{ github.run_number }}
 
       - name: 失败时上传编译日志
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log-failure-${{ github.run_number }}
+          name: build-log-failure-${{ matrix.id }}-${{ github.run_number }}
           path: |
             openwrt/build.log
             openwrt/logs
@@ -273,6 +316,9 @@ jobs:
           retention-days: 7
 
       - name: 整理产物并校验可刷镜像
+        env:
+          VARIANT_ID: ${{ matrix.id }}
+          VARIANT_LABEL: ${{ matrix.label }}
         run: |
           mkdir -p $GITHUB_WORKSPACE/output
           cd openwrt/bin/targets/sunxi/cortexa53
@@ -291,7 +337,12 @@ jobs:
             exit 1
           fi
           echo "OK squashfs: $SQUASH ($SZ bytes)"
-          [ -n "$EXT4" ] && echo "OK ext4: $EXT4" || echo "WARN: 无 ext4 镜像（可仅用 squashfs）"
+          if [ "$VARIANT_ID" = "370m" ]; then
+            [ -n "$EXT4" ] && echo "OK ext4: $EXT4" || echo "WARN: 无 ext4 镜像（可仅用 squashfs）"
+          else
+            # 20g 故意不打 ext4，避免 Actions 磁盘爆满
+            [ -z "$EXT4" ] && echo "OK: 20g 仅 squashfs（预期）" || echo "WARN: 20g 意外产出了 ext4"
+          fi
           cp -v *nanopi-r1s-h5*sdcard.img.gz $GITHUB_WORKSPACE/output/ 2>/dev/null || true
           cp -v *nanopi-r1s-h5* $GITHUB_WORKSPACE/output/ 2>/dev/null || true
           cp -v profiles.json config.buildinfo sha256sums version.buildinfo $GITHUB_WORKSPACE/output/ 2>/dev/null || true
@@ -299,16 +350,22 @@ jobs:
           cp -v $GITHUB_WORKSPACE/openwrt/build.log $GITHUB_WORKSPACE/output/build.log 2>/dev/null || true
           # 写一份刷机说明进产物（须保持 YAML | 块缩进，勿用顶格 heredoc）
           {
+            echo "规格：根分区 ${VARIANT_LABEL}（variant=${VARIANT_ID}）"
             echo '推荐首刷：*-squashfs-sdcard.img.gz'
             echo '1) 先解压得到 .img（不要直接刷 .gz）'
-            echo '2) Rufus / balenaEtcher / dd 写入 TF（建议 Class10+）'
+            if [ "$VARIANT_ID" = "20g" ]; then
+              echo '2) Rufus / balenaEtcher / dd 写入 TF（建议 ≥32GB Class10+）'
+              echo '   注意：解压后镜像约 20GB+，刷写时间较长'
+            else
+              echo '2) Rufus / balenaEtcher / dd 写入 TF（建议 Class10+，≥4GB 即可）'
+            fi
             echo '3) 5V/2A 供电，插入 BOOT 卡槽上电'
             echo '4) PWR 亮、STAT 闪烁 = 已启动'
             echo '5) 电脑网线接 LAN(eth1)，打开 http://192.168.5.1'
           } > "$GITHUB_WORKSPACE/output/FLASH.txt"
           {
-            echo "ARTIFACT_NAME=iStoreOS-${REPO_BRANCH}-NanoPi-R1S-H5"
-            echo "RELEASE_TAG=${REPO_BRANCH}-$(date +%Y%m%d)-${GITHUB_RUN_NUMBER}"
+            echo "ARTIFACT_NAME=iStoreOS-${REPO_BRANCH}-NanoPi-R1S-H5-${VARIANT_ID}"
+            echo "RELEASE_TAG=${REPO_BRANCH}-$(date +%Y%m%d)-${GITHUB_RUN_NUMBER}-${VARIANT_ID}"
           } >> $GITHUB_ENV
 
       - name: 上传构建产物
@@ -323,15 +380,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: iStoreOS ${{ env.REPO_BRANCH }} · NanoPi R1S H5 · ${{ env.RELEASE_TAG }}
+          name: iStoreOS ${{ env.REPO_BRANCH }} · NanoPi R1S H5 · ${{ matrix.label }} · ${{ env.RELEASE_TAG }}
           body: |
             iStoreOS `${{ env.REPO_BRANCH }}` 自动编译固件（友善 NanoPi R1S H5 / Allwinner H5）
 
             - 上游源码：${{ env.REPO_URL }} @ `${{ env.REPO_BRANCH }}` (${{ env.SRC_COMMIT }}, ${{ env.SRC_DATE }})
             - 目标平台：`sunxi` / `cortexa53` · NanoPi R1S H5
+            - **根分区**：`${{ matrix.label }}`（`CONFIG_TARGET_ROOTFS_PARTSIZE=${{ matrix.partsize }}`）
             - 软件集：**对齐官方 GL-MT3000（512MB）** — 商店 / QuickStart / 易有云 / DDNSTO / DiskMan / Samba / NFS / CIFS / zram
             - **不含** Docker、OAF、板载 WiFi
             - **推荐刷写**：`*-squashfs-sdcard.img.gz`（先解压成 `.img` 再刷，勿直刷 gz）
+            - 20GiB 版请用 **≥32GB** TF；刷写时间较长
             - 供电：5V/2A；PWR 亮 + STAT 闪 = 启动成功
             - 默认：`http://192.168.5.1`（接 LAN/eth1），用户 `root`
           files: output/*
