@@ -88,43 +88,9 @@ jobs:
             echo "TOOLCHAIN_HASH=$(git log -1 --pretty=format:'%h' -- tools toolchain include/toolchain*.mk 2>/dev/null || git rev-parse --short HEAD)"
           } >> $GITHUB_ENV
 
-          # Runner 在海外：去掉国内镜像（须用 JSON 解析，禁止 sed 删行——会留尾逗号弄坏文件）
-          # 上次 Run#6 失败根因：sed '/\.cn\//d' 破坏 projectsmirrors.json → tools/libdeflate 编不过
-          if [ -f scripts/projectsmirrors.json ]; then
-            python3 - <<'PY'
-import json, re
-from pathlib import Path
-p = Path("scripts/projectsmirrors.json")
-data = json.loads(p.read_text(encoding="utf-8"))
-drop = re.compile(r"(\.cn/|tencent|aliyun)", re.I)
-for key, urls in list(data.items()):
-    if not isinstance(urls, list):
-        continue
-    kept = [u for u in urls if not drop.search(u)]
-    # 去重并保持顺序
-    seen, out = set(), []
-    for u in kept:
-        if u not in seen:
-            seen.add(u); out.append(u)
-    data[key] = out
-# OPENWRT 源：CDN 优先，再追加其余
-ow = data.get("@OPENWRT") or []
-pref = [
-    "https://sources.cdn.openwrt.org",
-    "https://sources.openwrt.org",
-    "https://mirror2.openwrt.org/sources",
-]
-ordered = []
-for u in pref + list(ow):
-    if u not in ordered:
-        ordered.append(u)
-data["@OPENWRT"] = ordered
-p.write_text(json.dumps(data, indent="\t", ensure_ascii=False) + "\n", encoding="utf-8")
-json.loads(p.read_text(encoding="utf-8"))  # 自检合法 JSON
-print("mirrors OK @OPENWRT=", data["@OPENWRT"])
-print("mirrors OK @DEBIAN=", data.get("@DEBIAN"))
-PY
-          fi
+          # Runner 在海外：去掉国内镜像（JSON 脚本改写，禁止 sed 删行留尾逗号）
+          # Run#6：sed 弄坏 mirrors → tools/libdeflate 失败；Run#7：workflow 内嵌顶格 Python 再弄坏 YAML
+          python3 "$GITHUB_WORKSPACE/scripts/fix-mirrors.py" scripts/projectsmirrors.json
 
       - name: 恢复工具链 + ccache 缓存
         id: cache-tc
