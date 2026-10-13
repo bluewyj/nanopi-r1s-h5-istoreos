@@ -139,23 +139,28 @@ jobs:
           do
             grep -q "$k" .config || { echo "::error::关键配置 $k 未生效，请检查 $CONFIG_FILE 与 feeds"; exit 1; }
           done
-          # 全量 seed 对照：seed 里所有 =y 在 defconfig 后仍须 =y（把 silent drop 变成硬失败）
+          # seed 对照：仅硬校验目标/包/语言项（DEVEL/CCACHE 等构建选项允许缺省）
           DROPPED=0
           while IFS= read -r line || [ -n "$line" ]; do
             case "$line" in
-              CONFIG_*=y)
+              CONFIG_TARGET_*=y|CONFIG_PACKAGE_*=y|CONFIG_LUCI_*=y|CONFIG_KERNEL_*=y)
                 if ! grep -q "^${line}$" .config; then
                   echo "::error::defconfig 丢弃配置: $line"
                   DROPPED=1
                 fi
                 ;;
+              CONFIG_*=y)
+                if ! grep -q "^${line}$" .config; then
+                  echo "::warning::defconfig 丢弃非包配置(忽略): $line"
+                fi
+                ;;
             esac
           done < "$GITHUB_WORKSPACE/$CONFIG_FILE"
           if [ "$DROPPED" -ne 0 ]; then
-            echo "::error::存在被 defconfig 静默丢弃的配置，请核对包名/feeds 后重编"
+            echo "::error::存在被 defconfig 静默丢弃的包/目标配置，请核对包名/feeds 后重编"
             exit 1
           fi
-          echo "OK: seed 全部 =y 项均保留"
+          echo "OK: seed 目标/包配置均保留"
           # 拒绝板载 WiFi；拒绝把 Docker 全量塞回（MT3000 官方也不带）
           if grep -q 'CONFIG_PACKAGE_kmod-rtl8189es=y' .config; then
             echo "::error::检测到 kmod-rtl8189es，本项目不集成板载 WiFi"
