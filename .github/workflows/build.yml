@@ -88,14 +88,42 @@ jobs:
             echo "TOOLCHAIN_HASH=$(git log -1 --pretty=format:'%h' -- tools toolchain include/toolchain*.mk 2>/dev/null || git rev-parse --short HEAD)"
           } >> $GITHUB_ENV
 
-          # Runner 在海外：国内 .cn/腾讯/阿里 镜像反而更慢，去掉（社区通行做法）
-          # 参考：https://github.com/XiaoBinin/Actions-immortalwrt
+          # Runner 在海外：去掉国内镜像（须用 JSON 解析，禁止 sed 删行——会留尾逗号弄坏文件）
+          # 上次 Run#6 失败根因：sed '/\.cn\//d' 破坏 projectsmirrors.json → tools/libdeflate 编不过
           if [ -f scripts/projectsmirrors.json ]; then
-            sed -i '/\.cn\//d; /tencent/d; /aliyun/d' scripts/projectsmirrors.json || true
-            # 优先 CDN / mirror2
-            sed -i 's#https://sources.openwrt.org#https://sources.cdn.openwrt.org#g' scripts/projectsmirrors.json || true
-            echo "==> mirrors (head):"
-            head -n 40 scripts/projectsmirrors.json || true
+            python3 - <<'PY'
+import json, re
+from pathlib import Path
+p = Path("scripts/projectsmirrors.json")
+data = json.loads(p.read_text(encoding="utf-8"))
+drop = re.compile(r"(\.cn/|tencent|aliyun)", re.I)
+for key, urls in list(data.items()):
+    if not isinstance(urls, list):
+        continue
+    kept = [u for u in urls if not drop.search(u)]
+    # 去重并保持顺序
+    seen, out = set(), []
+    for u in kept:
+        if u not in seen:
+            seen.add(u); out.append(u)
+    data[key] = out
+# OPENWRT 源：CDN 优先，再追加其余
+ow = data.get("@OPENWRT") or []
+pref = [
+    "https://sources.cdn.openwrt.org",
+    "https://sources.openwrt.org",
+    "https://mirror2.openwrt.org/sources",
+]
+ordered = []
+for u in pref + list(ow):
+    if u not in ordered:
+        ordered.append(u)
+data["@OPENWRT"] = ordered
+p.write_text(json.dumps(data, indent="\t", ensure_ascii=False) + "\n", encoding="utf-8")
+json.loads(p.read_text(encoding="utf-8"))  # 自检合法 JSON
+print("mirrors OK @OPENWRT=", data["@OPENWRT"])
+print("mirrors OK @DEBIAN=", data.get("@DEBIAN"))
+PY
           fi
 
       - name: 恢复工具链 + ccache 缓存
@@ -218,12 +246,26 @@ jobs:
       - name: 下载软件源码包
         working-directory: ./openwrt
         run: |
+          # make download 会先编少量 host 工具(libdeflate/zstd)；失败时清残包并 -j1 诊断
+          mkdir -p .ccache dl
           for i in 1 2 3; do
-            make download -j$(nproc) && break
-            echo "::warning::make download 失败，重试 $i/3"
-            sleep $((i * 20))
-            [ "$i" -eq 3 ] && exit 1
+            if make download -j$(nproc); then
+              echo "OK: make download (attempt $i)"
+              # 清掉明显损坏的小文件
+              find dl -type f -size -1024c -print -delete 2>/dev/null || true
+              exit 0
+            fi
+            echo "::warning::make download 失败，重试 $i/3（常见于 host 工具或残包）"
+            find dl -type f -size -1024c -print -delete 2>/dev/null || true
+            rm -rf build_dir/hostpkg build_dir/host/.libdeflate* staging_dir/host/stamp/.libdeflate* 2>/dev/null || true
+            if [ "$i" -eq 2 ]; then
+              echo "==> 单线程诊断 tools/libdeflate + tools/zstd =="
+              make tools/libdeflate/compile tools/zstd/compile -j1 V=s || true
+            fi
+            sleep $((i * 15))
           done
+          echo "::error::make download 三次均失败"
+          exit 1
 
       - name: 编译固件（并行）
         id: compile
