@@ -14,7 +14,7 @@
 | 含 | 商店、QuickStart、OTA、易有云、DDNSTO、DiskMan、Samba、NFS、CIFS、文件传输、cpufreq、zram |
 | 不含 | Docker、OAF、MergerFS、板载 WiFi、MTK WiFi/风扇（MT3000 专有） |
 | LAN | **192.168.5.1**（MT3000 官方默认 192.168.100.1，本板按你要求改） |
-| 根分区 | 2048 MiB |
+| 根分区 | 370 MiB（对齐已验证可启动的 R1S H5 固件） |
 
 ## 刷机
 
