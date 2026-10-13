@@ -39,4 +39,29 @@ if [ -f package/base-files/files/bin/config_generate ]; then
     sed -i 's/192.168.1.1/192.168.5.1/g' package/base-files/files/bin/config_generate || true
 fi
 
+# ---------------------------------------------------------------------------
+# 内核新符号钉死：避免 CI 非交互 syncconfig 卡在 (NEW)
+# 现象：HWMON support for Realtek PHYs (REALTEK_PHY_HWMON) [N/y/?] (NEW)
+# 原因：上游把 REALTEK_PHY_HWMON 改成用户可见，但 sunxi config 未收录
+# 参考：https://github.com/openwrt/openwrt/pull/18677
+# ---------------------------------------------------------------------------
+pin_kconfig() {
+    local cfg="$1" sym="$2" val="$3"
+    [ -f "$cfg" ] || return 0
+    if grep -q "^${sym}=" "$cfg"; then
+        sed -i "s|^${sym}=.*|${sym}=${val}|" "$cfg"
+    elif grep -q "^# ${sym} is not set" "$cfg"; then
+        sed -i "s|^# ${sym} is not set|${sym}=${val}|" "$cfg"
+    else
+        echo "${sym}=${val}" >> "$cfg"
+    fi
+    echo "==> [diy-part2] kernel pin ${sym}=${val} -> ${cfg}"
+}
+for cfg in \
+    target/linux/sunxi/config-6.6 \
+    target/linux/sunxi/cortexa53/config-6.6
+do
+    pin_kconfig "$cfg" CONFIG_REALTEK_PHY_HWMON y
+done
+
 echo "==> [diy-part2] 完成"

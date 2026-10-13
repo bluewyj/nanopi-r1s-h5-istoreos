@@ -34,6 +34,10 @@ env:
   TZ: Asia/Shanghai
   CCACHE_DIR: /home/runner/.ccache
   CCACHE_MAXSIZE: 2G
+  # GitHub Actions 默认 CI=true 会让 ccache 开 DEV_MODE/-Werror，与本地行为不一致
+  # 参考：https://github.com/openwrt/openwrt/pull/20290
+  CCACHE_DEV_MODE: 'OFF'
+  BUILD_LOG: '1'
 
 jobs:
   build:
@@ -211,7 +215,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log-failure-${{ github.run_number }}
-          path: openwrt/build.log
+          path: |
+            openwrt/build.log
+            openwrt/logs
           if-no-files-found: warn
           retention-days: 7
 
