@@ -1,8 +1,6 @@
 #!/bin/sh
 #
-# 512MB 启动策略：
-# - 开启 zram
-# - 重型 NAS 服务由 97-r1s-network-dhcp 在首启禁用，避免拖死 dnsmasq 导致不下发 IP
+# 对齐 MT3000：开启 zram；不在此禁用商店/易有云等（下发 IP 问题按网口逻辑修）
 #
 
 if [ -x /etc/init.d/zram ]; then

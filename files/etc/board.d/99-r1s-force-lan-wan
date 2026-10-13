@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# 本仓库只编 R1S H5 一款机型。
+# 上游 02_network 依赖 board_name == friendlyarm,nanopi-r1s-h5；
+# 若检测失败会落入默认 lan=eth0，丝印 LAN（eth1/USB）上将完全无 DHCP。
+# 此处无条件强制 lan=eth1、wan=eth0，与官方 sunxi 板级定义一致。
+#
+. /lib/functions/uci-defaults.sh
+
+board_config_update
+ucidef_set_interfaces_lan_wan "eth1" "eth0"
+board_config_flush
+
+exit 0
