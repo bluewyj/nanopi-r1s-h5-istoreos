@@ -21,7 +21,10 @@
 1. 下载 **`*-squashfs-sdcard.img.gz`**，**先解压**成 `.img`。  
 2. Rufus / balenaEtcher 写入 TF（Class10+）。  
 3. **5V/2A** 供电；PWR 亮、STAT 闪 = 启动成功。  
-4. 网线接 **LAN(eth1)** → `http://192.168.5.1`（用户 `root`）。
+4. 网线接丝印 **LAN**（内核名 `eth1`，USB RTL8152）；WAN 口是 `eth0`。  
+5. 管理地址：`http://192.168.5.1`（用户 `root`）。  
+   - 若不通，先试 `http://192.168.100.1`（iStoreOS 原厂默认；旧固件若未改到 5.1 会落在这里）。  
+   - [pudie88 ImmortalWrt](https://github.com/pudie88/ImmortalWrt-nanopi-R1S-H5-passwall) 为 `192.168.10.1`，勿混淆。
 
 ## 编译
 

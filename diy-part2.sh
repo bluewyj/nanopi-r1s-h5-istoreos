@@ -33,10 +33,14 @@ if [ -f feeds/luci/collections/luci/Makefile ]; then
 fi
 
 # 主机名 + 默认 LAN 地址
+# 注意：iStoreOS 默认是 192.168.100.1（不是 OpenWrt 的 1.1）！
+# 只 sed 1.1→5.1 会导致首启仍落在 100.1，表现为“5.1 无法联通”。
 if [ -f package/base-files/files/bin/config_generate ]; then
     sed -i 's/OpenWrt/NanoPi-R1S-H5/g' package/base-files/files/bin/config_generate || true
-    sed -i 's/iStoreOS/NanoPi-R1S-H5/g' package/base-files/files/bin/config_generate || true
-    sed -i 's/192.168.1.1/192.168.5.1/g' package/base-files/files/bin/config_generate || true
+    sed -i "s/hostname='iStoreOS'/hostname='NanoPi-R1S-H5'/g" package/base-files/files/bin/config_generate || true
+    sed -i 's/192\.168\.100\.1/192.168.5.1/g' package/base-files/files/bin/config_generate || true
+    sed -i 's/192\.168\.1\.1/192.168.5.1/g' package/base-files/files/bin/config_generate || true
+    grep -nE '192\.168\.(100|5|1)\.1|hostname=' package/base-files/files/bin/config_generate | head -20 || true
 fi
 
 # ---------------------------------------------------------------------------
