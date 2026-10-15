@@ -22,11 +22,22 @@
    - `370m`：TF ≥4GB 即可  
    - `20g`：TF **≥32GB**；解压后约 20GB+，刷写较慢  
 2. Rufus / balenaEtcher 写入 TF（Class10+）。  
-3. **5V/2A** 供电；PWR 亮、STAT 闪 = 启动成功。  
-4. 网线接丝印 **LAN**（内核名 `eth1`，USB RTL8152）；WAN 口是 `eth0`。  
+3. **5V/2A** 供电；PWR 亮、STAT（红）心跳闪 = 系统在跑。  
+4. 网线接丝印 **LAN**（USB RTL8153 → `eth1` / `r8152`）；WAN 是板载 `eth0`。  
+   - 板载绿灯：`green:lan` 跟 eth1，`green:wan` 跟 eth0（有链路/收发才亮）。  
+   - 若网口只闪黄、不闪绿且拿不到 IP：多半是 LAN（USB）未起来，不是“没刷上系统”。  
 5. 管理地址：`http://192.168.5.1`（用户 `root`）。  
-   - 若不通，先试 `http://192.168.100.1`（iStoreOS 原厂默认；旧固件若未改到 5.1 会落在这里）。  
-   - [pudie88 ImmortalWrt](https://github.com/pudie88/ImmortalWrt-nanopi-R1S-H5-passwall) 为 `192.168.10.1`，勿混淆。
+   - 若不通，先试 `http://192.168.100.1`（iStoreOS 原厂默认）。  
+   - 对照可运行机（pudie88 ImmortalWrt 23.05）为 `192.168.10.1`，勿混淆。
+
+## 与可运行 ImmortalWrt 的差异（实机对照）
+
+| 项 | 可运行机（SSH 实测） | 本仓库 iStoreOS |
+|---|---|---|
+| 系统 | ImmortalWrt **23.05** / 内核 **5.15** | iStoreOS **24.10** / 内核 **6.6** |
+| LAN/WAN | `br-lan`←**eth1/r8152**，wan←**eth0/dwmac** | 同映射（board.d + 启动等待绑定） |
+| USB 固件 | 必有 `r8152-firmware`，dmesg：`load rtl8153b-2 ... successfully` | 配置已钉死 `CONFIG_PACKAGE_r8152-firmware=y` |
+| 内存占用 | 空闲约 **350MB**/512MB（包集轻） | 对齐 MT3000，首启更重；已加 zram + USB-LAN 早启 |
 
 ## 编译
 

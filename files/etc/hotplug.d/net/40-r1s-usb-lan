@@ -6,17 +6,21 @@
 drv=$(basename "$(readlink -f /sys/class/net/$DEVICENAME/device/driver 2>/dev/null)" 2>/dev/null)
 [ "$drv" = "r8152" ] || exit 0
 
-# 若 br-lan 端口不是本设备则改写
-if [ "$(uci -q get network.@device[0].name)" = "br-lan" ]; then
-	ports=$(uci -q get network.@device[0].ports)
-	if [ "$ports" != "$DEVICENAME" ]; then
-		uci -q delete network.@device[0].ports
-		uci -q add_list network.@device[0].ports="$DEVICENAME"
-		uci -q set network.lan.device='br-lan'
-		uci -q commit network
-		logger -t r1s-usb-lan "hotplug: br-lan -> $DEVICENAME"
+i=0
+while uci -q get network.@device[$i] >/dev/null 2>&1; do
+	if [ "$(uci -q get network.@device[$i].name)" = "br-lan" ]; then
+		ports=$(uci -q get network.@device[$i].ports)
+		if [ "$ports" != "$DEVICENAME" ]; then
+			uci -q delete network.@device[$i].ports
+			uci -q add_list network.@device[$i].ports="$DEVICENAME"
+			uci -q set network.lan.device='br-lan'
+			uci -q commit network
+			logger -t r1s-usb-lan "hotplug: br-lan -> $DEVICENAME"
+		fi
+		break
 	fi
-fi
+	i=$((i + 1))
+done
 
 /sbin/ifup lan 2>/dev/null || true
 /etc/init.d/dnsmasq restart 2>/dev/null || true

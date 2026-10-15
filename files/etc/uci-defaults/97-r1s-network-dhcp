@@ -27,14 +27,22 @@ uci -q set network.lan.proto='static'
 uci -q set network.lan.ipaddr='192.168.5.1'
 uci -q set network.lan.netmask='255.255.255.0'
 
-# 对齐对照机：br-lan.ports=eth1（USB r8152）；device 为空时兜底
-if [ "$(uci -q get network.@device[0].name)" = "br-lan" ]; then
-	uci -q delete network.@device[0].ports
-	uci -q add_list network.@device[0].ports='eth1'
-	uci -q set network.lan.device='br-lan'
-elif [ -z "$(uci -q get network.lan.device)" ]; then
+# 对齐对照机：br-lan.ports=eth1（USB r8152）；按 name 查找 device 段
+i=0
+found=
+while uci -q get network.@device[$i] >/dev/null 2>&1; do
+	if [ "$(uci -q get network.@device[$i].name)" = "br-lan" ]; then
+		uci -q delete network.@device[$i].ports
+		uci -q add_list network.@device[$i].ports='eth1'
+		uci -q set network.lan.device='br-lan'
+		found=1
+		break
+	fi
+	i=$((i + 1))
+done
+if [ -z "$found" ] && [ -z "$(uci -q get network.lan.device)" ]; then
 	uci -q set network.lan.device='eth1'
-	echo "WARN: network.lan.device empty, set eth1" >>"$LOG"
+	echo "WARN: no br-lan device, set lan.device=eth1" >>"$LOG"
 fi
 
 uci -q set dhcp.lan=dhcp
