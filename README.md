@@ -32,6 +32,6 @@
 
 推到 GitHub → Actions 写权限 → 运行 `Build iStoreOS (NanoPi R1S H5)`。  
 手动触发可选 `370m` / `20g` / `both`（默认两者都编）。  
-配置文件：`configs/nanopi-r1s-h5.config`、`configs/nanopi-r1s-h5-20g.config`（仅 `ROOTFS_PARTSIZE` 与是否出 ext4 不同）。
+配置文件：`configs/nanopi-r1s-h5.config`、`configs/nanopi-r1s-h5-20g.config`（仅 `ROOTFS_PARTSIZE` 不同；两版都出 squashfs + ext4）。
 
 本仓库与 `nanopi-r1s-h5-immortalwrt` 独立，互不修改。

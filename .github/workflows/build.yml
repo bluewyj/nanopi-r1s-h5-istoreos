@@ -79,6 +79,19 @@ jobs:
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     steps:
+      # 必须在 checkout 之前；20g 同时打 squashfs+ext4（~20GiB 级镜像）需要大磁盘
+      - name: 20g 最大化磁盘
+        if: matrix.id == '20g'
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 4096
+          swap-size-mb: 2048
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+
       - name: 检出本仓库
         uses: actions/checkout@v4
 
@@ -91,14 +104,12 @@ jobs:
           sudo swapoff -a || true
           sudo rm -f /mnt/swapfile || true
           sudo apt-get clean
-          echo "== 清理后 =="; df -h /
-
-      - name: 20g 额外清盘
-        if: matrix.id == '20g'
-        run: |
-          sudo docker system prune -af || true
-          sudo rm -rf /usr/local/share/powershell /usr/share/az_* /opt/microsoft || true
-          df -h /
+          if [ "${{ matrix.id }}" = "20g" ]; then
+            sudo docker system prune -af || true
+            sudo rm -rf /usr/local/share/powershell /usr/share/az_* /opt/microsoft \
+                        /usr/local/graalvm /usr/local/.ghcup || true
+          fi
+          echo "== 清理后 =="; df -h /; df -h "$GITHUB_WORKSPACE" || true
 
       - name: 安装编译依赖
         run: |
@@ -337,12 +348,7 @@ jobs:
             exit 1
           fi
           echo "OK squashfs: $SQUASH ($SZ bytes)"
-          if [ "$VARIANT_ID" = "370m" ]; then
-            [ -n "$EXT4" ] && echo "OK ext4: $EXT4" || echo "WARN: 无 ext4 镜像（可仅用 squashfs）"
-          else
-            # 20g 故意不打 ext4，避免 Actions 磁盘爆满
-            [ -z "$EXT4" ] && echo "OK: 20g 仅 squashfs（预期）" || echo "WARN: 20g 意外产出了 ext4"
-          fi
+          [ -n "$EXT4" ] && echo "OK ext4: $EXT4" || echo "WARN: 无 ext4 镜像（可仅用 squashfs）"
           cp -v *nanopi-r1s-h5*sdcard.img.gz $GITHUB_WORKSPACE/output/ 2>/dev/null || true
           cp -v *nanopi-r1s-h5* $GITHUB_WORKSPACE/output/ 2>/dev/null || true
           cp -v profiles.json config.buildinfo sha256sums version.buildinfo $GITHUB_WORKSPACE/output/ 2>/dev/null || true
