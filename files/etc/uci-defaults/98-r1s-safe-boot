@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# 对齐 MT3000：开启 zram；不在此禁用商店/易有云等（下发 IP 问题按网口逻辑修）
+# 对齐 MT3000：开启 zram；启用 USB-LAN 守护（对照可运行 ImmortalWrt）
 #
 
 if [ -x /etc/init.d/zram ]; then
@@ -9,5 +9,7 @@ if [ -x /etc/init.d/zram ]; then
 	uci -q commit system
 	/etc/init.d/zram enable 2>/dev/null || true
 fi
+
+[ -x /etc/init.d/r1s-usb-lan ] && /etc/init.d/r1s-usb-lan enable 2>/dev/null || true
 
 exit 0

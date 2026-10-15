@@ -222,6 +222,7 @@ jobs:
             CONFIG_PACKAGE_zram-swap=y \
             CONFIG_PACKAGE_ddns-scripts=y \
             CONFIG_PACKAGE_kmod-usb-net-rtl8152=y \
+            CONFIG_PACKAGE_r8152-firmware=y \
             CONFIG_PACKAGE_cifsmount=y \
             CONFIG_PACKAGE_blkid=y \
             CONFIG_PACKAGE_wget-ssl=y \

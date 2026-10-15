@@ -1,0 +1,100 @@
+#!/bin/sh /etc/rc.common
+#
+# R1S H5：LAN 在 USB RTL8153（r8152）上，比 SoC eth0 晚就绪。
+# 对照可运行 ImmortalWrt 23.05：dmesg 约 7s 才 load rtl8153b-2 固件并出现 eth1。
+# 本脚本在 network 之前尽量拉起 r8152，并把 br-lan 绑到真实 USB 网卡。
+#
+
+START=15
+STOP=90
+
+find_r8152() {
+	local path iface drv
+	for path in /sys/class/net/*; do
+		iface=${path##*/}
+		[ "$iface" = "lo" ] && continue
+		[ -e "$path/device/driver" ] || continue
+		drv=$(basename "$(readlink -f "$path/device/driver" 2>/dev/null)" 2>/dev/null)
+		[ "$drv" = "r8152" ] && {
+			echo "$iface"
+			return 0
+		}
+	done
+	return 1
+}
+
+bind_lan() {
+	local lanif="$1"
+	local ports
+	[ -n "$lanif" ] || return 1
+
+	# 已是预期则跳过
+	ports=$(uci -q get network.@device[0].ports 2>/dev/null)
+	if [ "$(uci -q get network.@device[0].name)" = "br-lan" ] && [ "$ports" = "$lanif" ]; then
+		return 0
+	fi
+
+	# 优先改名为 br-lan 的 device 段
+	local i=0
+	local found=
+	while uci -q get network.@device[$i] >/dev/null 2>&1; do
+		if [ "$(uci -q get network.@device[$i].name)" = "br-lan" ]; then
+			uci -q delete network.@device[$i].ports
+			uci -q add_list network.@device[$i].ports="$lanif"
+			found=1
+			break
+		fi
+		i=$((i + 1))
+	done
+
+	if [ -z "$found" ]; then
+		uci -q set network.lan.device="$lanif"
+	else
+		uci -q set network.lan.device='br-lan'
+	fi
+
+	uci -q set network.lan.proto='static'
+	[ -n "$(uci -q get network.lan.ipaddr)" ] || uci -q set network.lan.ipaddr='192.168.5.1'
+	[ -n "$(uci -q get network.lan.netmask)" ] || uci -q set network.lan.netmask='255.255.255.0'
+	uci -q commit network
+	logger -t r1s-usb-lan "bound lan to $lanif"
+}
+
+boot() {
+	# 固件 + 驱动（缺固件时灯色异常且无链路，对照机 dmesg: load rtl8153b-2 successfully）
+	modprobe r8152 2>/dev/null || true
+
+	local i lanif
+	for i in $(seq 1 40); do
+		lanif=$(find_r8152) && break
+		sleep 1
+	done
+
+	[ -n "$lanif" ] || {
+		logger -t r1s-usb-lan "WARN: r8152 iface not found after wait"
+		return 0
+	}
+
+	bind_lan "$lanif"
+
+	# LED：绿灯跟 LAN（USB）走，与可运行 ImmortalWrt 一致
+	uci -q batch <<-EOF
+		set system.led_lan=led
+		set system.led_lan.name='LAN'
+		set system.led_lan.sysfs='green:lan'
+		set system.led_lan.trigger='netdev'
+		set system.led_lan.mode='link tx rx'
+		set system.led_lan.dev='$lanif'
+		set system.led_wan=led
+		set system.led_wan.name='WAN'
+		set system.led_wan.sysfs='green:wan'
+		set system.led_wan.trigger='netdev'
+		set system.led_wan.mode='link tx rx'
+		set system.led_wan.dev='eth0'
+		commit system
+	EOF
+}
+
+start() {
+	boot
+}

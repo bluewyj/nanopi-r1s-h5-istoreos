@@ -1,0 +1,13 @@
+#!/bin/sh
+#
+# 无条件配置板载绿灯（与对照 ImmortalWrt / 上游 sunxi 一致）
+# green:wan -> eth0 (SoC)    green:lan -> eth1 (USB r8152)
+#
+. /lib/functions/uci-defaults.sh
+
+board_config_update
+ucidef_set_led_netdev "wan" "WAN" "green:wan" "eth0"
+ucidef_set_led_netdev "lan" "LAN" "green:lan" "eth1"
+board_config_flush
+
+exit 0

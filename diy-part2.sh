@@ -17,7 +17,7 @@ if [ -d "${SRC_FILES}" ]; then
     rm -rf "${OPENWRT_DIR}/files"
     cp -rf "${SRC_FILES}" "${OPENWRT_DIR}/files"
     find "${OPENWRT_DIR}/files/etc" -type f \
-         \( -path '*/uci-defaults/*' -o -path '*/init.d/*' -o -path '*/board.d/*' \) \
+         \( -path '*/uci-defaults/*' -o -path '*/init.d/*' -o -path '*/board.d/*' -o -path '*/hotplug.d/*' \) \
          -exec chmod 0755 {} \; 2>/dev/null || true
     echo "==> [diy-part2] 已注入:"
     find "${OPENWRT_DIR}/files" -type f | sed "s#${OPENWRT_DIR}/##"
